@@ -1,0 +1,6 @@
+Measure,Value
+TCGA samples,232
+Training samples,186
+Held-out test samples,46
+Genes after training-only expression filtering,20191
+Selected training-variable predictors,1000

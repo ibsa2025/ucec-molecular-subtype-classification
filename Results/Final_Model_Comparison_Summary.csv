@@ -1,0 +1,2 @@
+LASSO_Test_Accuracy,Random_Forest_Test_Accuracy,Accuracy_Difference,LASSO_Correct_Samples,Random_Forest_Correct_Samples,Test_Sample_Size,Shared_Important_Genes,McNemar_P_Value
+0.9565217391304348,0.782608695652174,0.17391304347826086,44,36,46,11,0.013328328780817559

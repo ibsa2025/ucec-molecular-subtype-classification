@@ -1,0 +1,7 @@
+Direction,Gene_Count,Comparison
+Negative log2FC,1549,CN-high vs CN-low
+Positive log2FC,1292,CN-high vs CN-low
+Negative log2FC,857,CN-high vs Hypermutated
+Positive log2FC,1269,CN-high vs Hypermutated
+Negative log2FC,222,CN-low vs Hypermutated
+Positive log2FC,801,CN-low vs Hypermutated

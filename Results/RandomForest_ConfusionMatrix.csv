@@ -1,0 +1,10 @@
+Predicted,Actual,Count
+CN_high,CN_high,11
+CN_low,CN_high,0
+Hypermutated,CN_high,1
+CN_high,CN_low,0
+CN_low,CN_low,16
+Hypermutated,CN_low,2
+CN_high,Hypermutated,2
+CN_low,Hypermutated,5
+Hypermutated,Hypermutated,9

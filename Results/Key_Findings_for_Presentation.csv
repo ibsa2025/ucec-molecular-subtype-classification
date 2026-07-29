@@ -1,0 +1,8 @@
+Analysis,Main_Finding
+Differential expression,"Thousands of genes differed between the CN_high, CN_low and Hypermutated subtypes."
+Functional enrichment,"GO and KEGG results highlighted subtype-associated ciliary, microtubule, immune and signalling pathways."
+Multinomial LASSO,LASSO achieved 95.7% held-out TCGA accuracy and selected 56 unique genes.
+Random Forest,Random Forest achieved 78.3% held-out TCGA accuracy and showed reduced sensitivity for Hypermutated tumours.
+Model comparison,LASSO outperformed Random Forest using the same training and test partitions.
+External CPTAC validation,Accuracy fell to 56.4% for LASSO and 46.5% for Random Forest in the independent CPTAC cohort.
+Biomarker prioritisation,"Eleven genes were supported by both machine-learning methods, including L1CAM, CLDN9, ACTL8 and HIF3A."

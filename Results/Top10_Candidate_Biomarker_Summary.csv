@@ -1,0 +1,11 @@
+Gene,Gene_Name,Associated_Subtype,Model_Support,LASSO_Coefficient,RF_Importance,Significant_DE_Comparisons,Evidence_Score
+L1CAM,L1 cell adhesion molecule,CN_high,LASSO and Random Forest,0.42346179916195864,0.00250981220791211,3,7
+RGS22,regulator of G protein signaling 22,Hypermutated,LASSO and Random Forest,-0.19663634313502995,0.00167982836931807,3,7
+AC013724.1,NA,CN_low,LASSO and Random Forest,0.19459797410200705,0.0023374658715198,3,7
+AC009237.3,NA,CN_high,LASSO and Random Forest,0.2877699267200849,0.00263179084622213,2,6
+SLFN13,schlafen family member 13,Hypermutated,LASSO and Random Forest,-0.2796416954781719,0.00164350054051926,2,6
+SMIM31,small integral membrane protein 31,Hypermutated,LASSO and Random Forest,0.19585347068868517,0.00258831402136881,2,6
+ACTL8,actin like 8,CN_high,LASSO and Random Forest,0.18793863815285208,0.00260595417126985,2,6
+SDR42E1,"short chain dehydrogenase/reductase family 42E, member 1",Hypermutated,LASSO and Random Forest,-0.1722048935792575,0.00182911780192482,2,6
+CLDN9,claudin 9,CN_high,LASSO and Random Forest,0.1708037218028388,0.00286124409943556,2,6
+AC092969.1,NA,CN_high,LASSO and Random Forest,0.11963061685156638,0.00218230925339118,2,6

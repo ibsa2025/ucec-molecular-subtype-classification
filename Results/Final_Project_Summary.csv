@@ -1,0 +1,13 @@
+Measure,Result
+TCGA samples,232
+TCGA training samples,186
+TCGA held-out test samples,46
+CPTAC external samples,101
+Input genes used for modelling,1000
+LASSO-selected genes,56
+Top Random Forest genes,30
+Genes supported by both models,11
+LASSO internal test accuracy,95.7%
+Random Forest internal test accuracy,78.3%
+LASSO CPTAC external accuracy,56.4%
+Random Forest CPTAC external accuracy,46.5%
