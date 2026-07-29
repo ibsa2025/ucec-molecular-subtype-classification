@@ -1,0 +1,437 @@
+---
+title: "Reproducible Analysis: UCEC Molecular Subtype Classification (Low-Memory Run)"
+author: "Student ID: 3173204"
+date: "31 July 2026"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    number_sections: true
+    code_folding: show
+    df_print: paged
+---
+
+# Purpose
+
+This document runs the complete UCEC transcriptomic analysis in a fixed and
+reproducible order. It covers data checks, exploratory analysis, differential
+expression, functional enrichment, machine-learning development, independent
+CPTAC evaluation, biomarker prioritisation and final summary outputs.
+
+```{r setup}
+knitr::opts_chunk$set(
+  echo = TRUE,
+  message = FALSE,
+  warning = FALSE,
+  error = FALSE,
+  fig.width = 9,
+  fig.height = 6,
+  dpi = 150
+)
+
+options(stringsAsFactors = FALSE)
+set.seed(123)
+
+project_root <- normalizePath(
+  ".",
+  winslash = "/",
+  mustWork = TRUE
+)
+
+knitr::opts_knit$set(
+  root.dir = project_root
+)
+
+cat("Project root:", project_root, "\n")
+cat("R version:", R.version.string, "\n")
+```
+
+# 1. Project setup
+
+```{r project-setup}
+folders_to_create <- c(
+  "Scripts/Final",
+  "Figures",
+  "Results",
+  "Tables"
+)
+
+invisible(
+  lapply(
+    folders_to_create,
+    dir.create,
+    recursive = TRUE,
+    showWarnings = FALSE
+  )
+)
+
+required_data_files <- c(
+  paste0(
+    "TCGA Data/subtype_tumor_only/",
+    "tcga_ucec_subtype_counts_geneSymbol.csv"
+  ),
+  paste0(
+    "TCGA Data/subtype_tumor_only/",
+    "tcga_ucec_subtype_metadata.csv"
+  ),
+  paste0(
+    "CPTAC Data/subtype_tumor_only/",
+    "cptac_ucec_subtype_rna.csv"
+  ),
+  paste0(
+    "CPTAC Data/subtype_tumor_only/",
+    "cptac_ucec_subtype_metadata.csv"
+  )
+)
+
+data_status <- data.frame(
+  file = required_data_files,
+  exists = file.exists(required_data_files)
+)
+
+knitr::kable(
+  data_status,
+  caption = "Required data-file check"
+)
+
+if (!all(data_status$exists)) {
+  stop(
+    "One or more required data files are missing. ",
+    "Place the TCGA and CPTAC files in the paths shown above."
+  )
+}
+```
+
+# 2. Package check
+
+```{r package-check}
+required_packages <- c(
+  "tidyverse",
+  "readr",
+  "edgeR",
+  "limma",
+  "caret",
+  "glmnet",
+  "Matrix",
+  "ranger",
+  "clusterProfiler",
+  "AnnotationDbi",
+  "org.Hs.eg.db",
+  "enrichplot",
+  "pheatmap",
+  "patchwork",
+  "grid"
+)
+
+package_status <- data.frame(
+  package = required_packages,
+  installed = vapply(
+    required_packages,
+    requireNamespace,
+    quietly = TRUE,
+    FUN.VALUE = logical(1)
+  )
+)
+
+knitr::kable(
+  package_status,
+  caption = "Required R-package check"
+)
+
+if (!all(package_status$installed)) {
+  stop(
+    "Install the missing packages before knitting: ",
+    paste(
+      package_status$package[
+        !package_status$installed
+      ],
+      collapse = ", "
+    )
+  )
+}
+```
+
+# 3. Script inventory
+
+Scripts are executed alphabetically; the two-digit prefixes therefore determine
+the analytical order.
+
+```{r script-inventory}
+final_scripts <- sort(
+  list.files(
+    path = "Scripts/Final",
+    pattern = "^[0-9]{2}_.+\\.R$",
+    full.names = TRUE
+  )
+)
+
+if (length(final_scripts) != 15) {
+  stop(
+    "Expected 15 numbered scripts in Scripts/Final, but found ",
+    length(final_scripts),
+    "."
+  )
+}
+
+script_inventory <- data.frame(
+  order = seq_along(final_scripts),
+  script = basename(final_scripts),
+  size_kb = round(
+    file.info(final_scripts)$size / 1024,
+    1
+  )
+)
+
+knitr::kable(
+  script_inventory,
+  caption = "Scripts included in the workflow"
+)
+```
+
+# 4. Run the complete analysis
+
+To reduce memory use, every numbered script is run in a separate clean R
+process. This prevents large expression matrices and fitted models from
+accumulating in the knitting session. A separate log is saved for every script.
+
+```{r run-analysis, echo=TRUE, results='asis'}
+dir.create(
+  "Results/Logs",
+  recursive = TRUE,
+  showWarnings = FALSE
+)
+
+rscript_command <- file.path(
+  R.home("bin"),
+  "Rscript"
+)
+
+if (!file.exists(rscript_command)) {
+  stop(
+    "Rscript executable was not found at: ",
+    rscript_command
+  )
+}
+
+run_script_separately <- function(
+    path,
+    script_number
+) {
+  script_name <- basename(path)
+
+  log_stub <- tools::file_path_sans_ext(
+    script_name
+  )
+
+  log_file <- file.path(
+    "Results/Logs",
+    paste0(
+      sprintf("%02d", script_number),
+      "_",
+      log_stub,
+      ".log"
+    )
+  )
+
+  cat(
+    paste0(
+      "\n\n**Running ",
+      script_name,
+      "...**\n\n"
+    )
+  )
+
+  # Each child process starts with --vanilla, so it does not restore .RData.
+  exit_status <- system2(
+    command = rscript_command,
+    args = c(
+      "--vanilla",
+      shQuote(
+        normalizePath(
+          path,
+          winslash = "/",
+          mustWork = TRUE
+        )
+      )
+    ),
+    stdout = log_file,
+    stderr = log_file
+  )
+
+  if (!identical(exit_status, 0L)) {
+    log_lines <- readLines(
+      log_file,
+      warn = FALSE
+    )
+
+    log_tail <- tail(
+      log_lines,
+      60
+    )
+
+    stop(
+      paste0(
+        "Script failed: ",
+        script_name,
+        "\n\nLast lines from ",
+        log_file,
+        ":\n",
+        paste(
+          log_tail,
+          collapse = "\n"
+        )
+      ),
+      call. = FALSE
+    )
+  }
+
+  cat(
+    paste0(
+      "Completed successfully. Log: `",
+      log_file,
+      "`\n\n"
+    )
+  )
+
+  invisible(gc())
+}
+
+for (script_number in seq_along(final_scripts)) {
+  run_script_separately(
+    path = final_scripts[[script_number]],
+    script_number = script_number
+  )
+}
+```
+
+# 5. Core reproducibility checks
+
+```{r key-result-checks}
+x_train_check <- readRDS(
+  "Results/ML/x_train_scaled.rds"
+)
+
+x_test_check <- readRDS(
+  "Results/ML/x_test_scaled.rds"
+)
+
+y_train_check <- readRDS(
+  "Results/ML/y_train.rds"
+)
+
+y_test_check <- readRDS(
+  "Results/ML/y_test.rds"
+)
+
+shared_gene_check <- readr::read_csv(
+  "Results/ML/LASSO_RandomForest_Shared_Genes.csv",
+  show_col_types = FALSE
+)
+
+cptac_metric_check <- readr::read_csv(
+  "Results/External_Validation/CPTAC_Model_Metrics.csv",
+  show_col_types = FALSE
+)
+
+stopifnot(
+  nrow(x_train_check) == 186,
+  nrow(x_test_check) == 46,
+  length(y_train_check) == 186,
+  length(y_test_check) == 46,
+  ncol(x_train_check) == 1000,
+  ncol(x_test_check) == 1000,
+  nrow(shared_gene_check) == 11,
+  nrow(cptac_metric_check) >= 2
+)
+
+key_checks <- data.frame(
+  Check = c(
+    "Training samples",
+    "Held-out test samples",
+    "Training-selected predictors",
+    "Shared LASSO/RF candidate genes",
+    "CPTAC model rows"
+  ),
+  Observed = c(
+    nrow(x_train_check),
+    nrow(x_test_check),
+    ncol(x_train_check),
+    nrow(shared_gene_check),
+    nrow(cptac_metric_check)
+  ),
+  Expected = c(
+    186,
+    46,
+    1000,
+    11,
+    2
+  )
+)
+
+knitr::kable(
+  key_checks,
+  caption = "Core result checks"
+)
+```
+
+# 6. Final output audit
+
+```{r output-audit}
+expected_outputs <- c(
+  "Figures/PCA/PCA_TCGA_Subtypes_Top1000_Combined.png",
+  "Figures/DE/Volcano_Plots_Combined.png",
+  "Figures/DE/DEG_Counts_by_Comparison.png",
+  "Figures/Enrichment/GO_BP_Combined.png",
+  "Figures/Enrichment/KEGG_Combined.png",
+  "Figures/ML/LASSO_CrossValidation.png",
+  "Figures/ML/RandomForest_Top_Genes.png",
+  "Results/ML/Model_Comparison_Primary.csv",
+  "Results/External_Validation/CPTAC_Model_Metrics.csv",
+  paste0(
+    "Results/Biological_Interpretation/",
+    "All_ML_DE_Biomarker_Evidence.csv"
+  ),
+  paste0(
+    "Figures/Biological_Interpretation/",
+    "Priority_Biomarker_Heatmap_600dpi.png"
+  )
+)
+
+output_status <- data.frame(
+  output = expected_outputs,
+  exists = file.exists(expected_outputs),
+  size_kb = ifelse(
+    file.exists(expected_outputs),
+    round(
+      file.info(expected_outputs)$size / 1024,
+      1
+    ),
+    NA_real_
+  )
+)
+
+knitr::kable(
+  output_status,
+  caption = "Final output audit"
+)
+
+if (!all(output_status$exists)) {
+  warning(
+    "Some expected outputs were not regenerated. ",
+    "Review the output-audit table."
+  )
+}
+```
+
+# 7. Data availability
+
+The TCGA-UCEC and CPTAC-UCEC datasets may be subject to access or
+redistribution conditions. The code, expected directory structure and input
+filenames are supplied so that authorised users can reproduce the analysis
+after obtaining the datasets from the appropriate sources.
+
+# 8. Computational environment
+
+```{r session-information}
+sessionInfo()
+```

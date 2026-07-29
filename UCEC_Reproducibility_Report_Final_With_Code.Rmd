@@ -1,0 +1,918 @@
+---
+title: "UCEC Molecular Subtype Classification: Final Reproducibility Report"
+author: "Student ID: 3173204"
+date: "31 July 2026"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    number_sections: true
+    code_folding: show
+    self_contained: true
+    df_print: paged
+---
+
+# Project purpose and rationale
+
+Uterine corpus endometrial carcinoma is molecularly heterogeneous, and tumours
+assigned to different genomic subtypes can differ in biological behaviour,
+prognosis and potential treatment relevance. The central purpose of this
+project was therefore to determine whether tumour transcriptomic profiles can
+reliably distinguish three harmonised UCEC molecular groups—CN-high, CN-low
+and Hypermutated—and to identify reproducible candidate genes associated with
+those distinctions.
+
+The analytical strategy combined complementary approaches because no single
+method answers the full research question. Differential-expression analysis
+was used to identify subtype-associated transcriptional changes; GO and KEGG
+enrichment were used to investigate the biological processes represented by
+those changes; and multinomial LASSO and Random Forest were used to test
+whether expression patterns could predict molecular subtype in unseen samples.
+Candidate biomarkers were prioritised by identifying genes supported by both
+machine-learning approaches and then integrating differential-expression and
+biological evidence.
+
+TCGA-UCEC was used for model development and held-out internal evaluation,
+while CPTAC-UCEC provided an independent external transfer assessment. This
+design allowed the project to examine both internal predictive performance and
+the extent to which the learned signal transferred across cohorts. The outputs
+should be interpreted as computational evidence for candidate biomarkers and
+subtype classification, rather than as clinical validation.
+
+For reproducibility, the heavy workflow is executed through
+`UCEC_Master_Analysis_Low_Memory.Rmd`. This report runs the later lightweight
+figure and table scripts, displays the complete results, and provides
+collapsible source code for every analytical stage.
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = TRUE,
+  message = FALSE,
+  warning = FALSE,
+  error = FALSE
+)
+
+options(stringsAsFactors = FALSE)
+
+show_figure <- function(
+    path,
+    caption,
+    width = "95%"
+) {
+  cat("\n\n")
+  cat(
+    paste0(
+      "**",
+      caption,
+      "**\n\n"
+    )
+  )
+
+  if (file.exists(path)) {
+    cat(
+      paste0(
+        "![",
+        caption,
+        "](",
+        path,
+        "){width=",
+        width,
+        "}\n\n"
+      )
+    )
+  } else {
+    cat(
+      paste0(
+        "> Figure not found: `",
+        path,
+        "`. Run the associated script and knit again.\n\n"
+      )
+    )
+  }
+}
+
+show_table <- function(
+    path,
+    caption,
+    n = Inf,
+    digits = 4
+) {
+  if (file.exists(path)) {
+    table_data <- readr::read_csv(
+      path,
+      show_col_types = FALSE
+    )
+
+    if (is.finite(n)) {
+      table_data <- utils::head(
+        table_data,
+        n
+      )
+    }
+
+    print(
+      knitr::kable(
+        table_data,
+        caption = caption,
+        format = "html",
+        digits = digits,
+        escape = TRUE
+      )
+    )
+  } else {
+    cat(
+      paste0(
+        "\n> Table not found: `",
+        path,
+        "`. Run the associated script and knit again.\n\n"
+      )
+    )
+  }
+}
+
+html_escape <- function(text) {
+  text <- gsub(
+    "&",
+    "&amp;",
+    text,
+    fixed = TRUE
+  )
+
+  text <- gsub(
+    "<",
+    "&lt;",
+    text,
+    fixed = TRUE
+  )
+
+  text <- gsub(
+    ">",
+    "&gt;",
+    text,
+    fixed = TRUE
+  )
+
+  text
+}
+
+show_script_code <- function(
+    path,
+    title = NULL
+) {
+  if (is.null(title)) {
+    title <- basename(path)
+  }
+
+  if (!file.exists(path)) {
+    cat(
+      paste0(
+        "\n> Source-code file not found: `",
+        path,
+        "`.\n\n"
+      )
+    )
+
+    return(
+      invisible(NULL)
+    )
+  }
+
+  code_lines <- readLines(
+    path,
+    warn = FALSE
+  )
+
+  escaped_code <- html_escape(
+    paste(
+      code_lines,
+      collapse = "\n"
+    )
+  )
+
+  cat(
+    paste0(
+      "\n<details style='margin:1em 0;'>",
+      "<summary><strong>View R code used: ",
+      title,
+      "</strong></summary>",
+      "<pre style='max-height:650px;overflow:auto;",
+      "background:#f7f7f7;padding:1em;border:1px solid #ddd;'>",
+      "<code class='language-r'>",
+      escaped_code,
+      "</code></pre>",
+      "</details>\n\n"
+    )
+  )
+}
+
+show_file_link <- function(
+    path,
+    label
+) {
+  if (file.exists(path)) {
+    cat(
+      paste0(
+        "<p><a href='",
+        path,
+        "'>",
+        label,
+        "</a></p>\n"
+      )
+    )
+  }
+}
+```
+
+# Supplementary figure and table generation
+
+The following five later scripts are lightweight and are run in separate clean
+R processes. They create the study-design figure, feature-selection workflow,
+HTML-ready model-performance table, shared-candidate-biomarker table and the
+final publication-style differential-expression figures.
+
+```{r run-supplementary-scripts}
+supplementary_scripts <- c(
+  "Scripts/Thesis_Figures/16_Dataset_Study_Design.R",
+  "Scripts/Thesis_Figures/17_Feature_Selection_Strategy.R",
+  "Scripts/Thesis_Figures/18_Model_Performance_Table.R",
+  "Scripts/Thesis_Figures/19_Shared_Candidate_Biomarkers_Table.R",
+  "Scripts/Thesis_Figures/20_Publication_Style_DE_Figures.R"
+)
+
+dir.create(
+  "Results/Logs",
+  recursive = TRUE,
+  showWarnings = FALSE
+)
+
+rscript_command <- file.path(
+  R.home("bin"),
+  "Rscript"
+)
+
+supplementary_status <- lapply(
+  supplementary_scripts,
+  function(script_path) {
+    if (!file.exists(script_path)) {
+      return(
+        data.frame(
+          Script = basename(script_path),
+          Status = "Missing",
+          Log = NA_character_
+        )
+      )
+    }
+
+    log_path <- file.path(
+      "Results/Logs",
+      paste0(
+        tools::file_path_sans_ext(
+          basename(script_path)
+        ),
+        ".log"
+      )
+    )
+
+    exit_status <- system2(
+      command = rscript_command,
+      args = c(
+        "--vanilla",
+        shQuote(
+          normalizePath(
+            script_path,
+            winslash = "/",
+            mustWork = TRUE
+          )
+        )
+      ),
+      stdout = log_path,
+      stderr = log_path
+    )
+
+    data.frame(
+      Script = basename(script_path),
+      Status = ifelse(
+        exit_status == 0,
+        "Completed",
+        paste0(
+          "Failed (exit ",
+          exit_status,
+          ")"
+        )
+      ),
+      Log = log_path
+    )
+  }
+)
+
+supplementary_status <- dplyr::bind_rows(
+  supplementary_status
+)
+
+knitr::kable(
+  supplementary_status,
+  caption = "Supplementary script execution status"
+)
+```
+
+# Study design and molecular subtypes
+
+**What was done:** The TCGA and CPTAC cohorts, training/test split, analytical
+workflow and three harmonised molecular-subtype groups were summarised in one
+study-design figure.
+
+```{r study-design-output, results='asis', echo=FALSE}
+show_script_code(
+  "Scripts/Thesis_Figures/16_Dataset_Study_Design.R",
+  "Study design and molecular-subtype figure"
+)
+
+show_figure(
+  "Figures/Dataset_Slide/Datasets_StudyDesign_MolecularSubtypes_Final.png",
+  "Figure 2.1. Datasets, study design and molecular subtypes"
+)
+```
+
+# Data exploration
+
+**What was done:** The TCGA expression matrix and metadata were loaded, sample
+identifiers were checked and the harmonised subtype groups were summarised.
+
+```{r data-overview, results='asis', echo=FALSE}
+show_script_code(
+  "Scripts/Final/01_Data_Exploration.R",
+  "Data exploration"
+)
+
+metadata_path <- paste0(
+  "TCGA Data/subtype_tumor_only/",
+  "tcga_ucec_subtype_metadata.csv"
+)
+
+if (file.exists(metadata_path)) {
+  tcga_meta_report <- readr::read_csv(
+    metadata_path,
+    show_col_types = FALSE
+  )
+
+  subtype_summary <- as.data.frame(
+    table(
+      tcga_meta_report$subtype3
+    )
+  )
+
+  names(subtype_summary) <- c(
+    "Molecular subtype",
+    "Number of samples"
+  )
+
+  print(
+    knitr::kable(
+      subtype_summary,
+      caption = "TCGA-UCEC three-class subtype distribution",
+      format = "html"
+    )
+  )
+}
+```
+
+# Principal component analysis
+
+**What was done:** Low-expression and mitochondrial genes were removed,
+expression was transformed to log2 CPM, the 1,000 most variable genes were
+selected and PCA was used to examine global transcriptional patterns.
+
+```{r pca-results, results='asis', echo=FALSE}
+show_script_code(
+  "Scripts/Final/02_PCA_Analysis.R",
+  "Principal component analysis"
+)
+
+show_figure(
+  "Figures/PCA/PCA_TCGA_Subtypes_Top1000_Combined.png",
+  "Principal component analysis of the 1,000 most variable genes"
+)
+
+show_table(
+  "Figures/PCA/PCA_Variance_Explained.csv",
+  "Variance explained by the principal components",
+  n = 10
+)
+```
+
+# Most variable genes
+
+**What was done:** Non-mitochondrial genes were ranked by variance in
+normalised expression.
+
+```{r variable-gene-results, results='asis', echo=FALSE}
+show_script_code(
+  "Scripts/Final/03_Top_Variable_Genes.R",
+  "Top variable genes"
+)
+
+show_figure(
+  "Figures/Exploratory/Top20_Most_Variable_Genes.png",
+  "Top 20 most variable non-mitochondrial genes"
+)
+
+show_table(
+  "Results/Exploratory/Top20_Most_Variable_NonMito_Genes.csv",
+  "Top variable genes ranked by variance",
+  n = 20
+)
+```
+
+# Exploratory heatmap
+
+**What was done:** The top 20 variable genes were standardised across samples
+and visualised with hierarchical clustering and subtype annotations.
+
+```{r exploratory-heatmap, results='asis', echo=FALSE}
+show_script_code(
+  "Scripts/Final/04_Heatmap_Top20_Genes.R",
+  "Exploratory heatmap"
+)
+
+show_figure(
+  "Figures/Exploratory/Heatmap_Top20_Variable_Genes.png",
+  "Heatmap of the top 20 variable genes"
+)
+```
+
+# Differential-expression analysis
+
+**What was done:** limma-voom compared CN-high with CN-low, CN-high with
+Hypermutated, and CN-low with Hypermutated tumours. Genes were considered
+significant at adjusted P < 0.05 and absolute log2 fold change > 1.
+
+```{r de-summary, results='asis', echo=FALSE}
+show_script_code(
+  "Scripts/Final/05_Differential_Expression_limma_voom.R",
+  "limma-voom differential-expression analysis"
+)
+
+show_table(
+  "Results/DE_Significant_Gene_Counts.csv",
+  "Number of significant genes in each pairwise comparison"
+)
+```
+
+# Publication-style differential-expression figures
+
+**Why this analysis was included:** Differential-expression counts indicate the
+relative scale of transcriptomic divergence between subtype pairs, while
+volcano plots show how effect size and statistical significance combine at the
+gene level. Together, these outputs help establish which comparisons are most
+transcriptionally distinct and provide the biological context for subsequent
+enrichment and biomarker analyses.
+
+Script 06 generated the initial diagnostic volcano and count plots. Script 20
+uses the same limma-voom result tables to produce the final publication-style
+figures, labelled-gene tables and optional MA plots.
+
+```{r publication-de-results, results='asis', echo=FALSE}
+show_script_code(
+  "Scripts/Final/06_Volcano_Plots_limma_voom.R",
+  "Initial volcano plots and DEG-count visualisation"
+)
+
+show_script_code(
+  "Scripts/Thesis_Figures/20_Publication_Style_DE_Figures.R",
+  "Final publication-style differential-expression figures"
+)
+
+show_figure(
+  paste0(
+    "Figures/Differential_Expression/",
+    "Combined_Volcano_Plots_600dpi.png"
+  ),
+  paste0(
+    "Publication-style volcano plots for the three ",
+    "molecular-subtype comparisons"
+  )
+)
+
+show_figure(
+  paste0(
+    "Figures/Differential_Expression/",
+    "Significant_DEG_Counts_600dpi.png"
+  ),
+  paste0(
+    "Figure 3.3. Number of significantly differentially expressed genes ",
+    "across molecular subtype comparisons"
+  )
+)
+
+show_table(
+  paste0(
+    "Results/Differential_Expression/",
+    "Significant_DEG_Counts_by_Comparison.csv"
+  ),
+  "Significant DEG counts by comparison and direction"
+)
+
+show_table(
+  paste0(
+    "Results/Differential_Expression/",
+    "Total_Significant_DEGs_by_Comparison.csv"
+  ),
+  "Total significant DEGs in each molecular-subtype comparison"
+)
+
+show_table(
+  paste0(
+    "Results/Differential_Expression/",
+    "Volcano_Plot_Labelled_Genes.csv"
+  ),
+  "Genes labelled in the publication-style volcano plots"
+)
+
+if (
+  file.exists(
+    paste0(
+      "Figures/Differential_Expression/",
+      "Combined_MA_Plots_600dpi.png"
+    )
+  )
+) {
+  show_figure(
+    paste0(
+      "Figures/Differential_Expression/",
+      "Combined_MA_Plots_600dpi.png"
+    ),
+    "MA plots for the three molecular-subtype comparisons"
+  )
+}
+```
+
+# Top differentially expressed genes
+
+```{r top-de-results, results='asis', echo=FALSE}
+show_script_code(
+  "Scripts/Final/07_Top_DE_Genes.R",
+  "Top differentially expressed genes"
+)
+
+show_table(
+  "Results/Top20_DE_CNhigh_vs_CNlow.csv",
+  "Top genes: CN-high versus CN-low",
+  n = 10
+)
+
+show_table(
+  "Results/Top20_DE_CNhigh_vs_Hypermutated.csv",
+  "Top genes: CN-high versus Hypermutated",
+  n = 10
+)
+
+show_table(
+  "Results/Top20_DE_CNlow_vs_Hypermutated.csv",
+  "Top genes: CN-low versus Hypermutated",
+  n = 10
+)
+```
+
+# Functional enrichment
+
+**What was done:** Significant genes were converted to Entrez identifiers and
+used for Gene Ontology Biological Process and KEGG over-representation
+analyses.
+
+```{r enrichment-results, results='asis', echo=FALSE}
+show_script_code(
+  "Scripts/Final/08_Functional_Enrichment_GO_KEGG.R",
+  "GO and KEGG enrichment"
+)
+
+show_figure(
+  "Figures/Enrichment/GO_BP_Combined.png",
+  "Gene Ontology Biological Process enrichment"
+)
+
+show_figure(
+  "Figures/Enrichment/KEGG_Combined.png",
+  "KEGG pathway enrichment"
+)
+
+show_table(
+  "Results/Enrichment/Enrichment_Summary.csv",
+  "Number of enriched GO terms and KEGG pathways"
+)
+```
+
+# Machine-learning data preparation
+
+**What was done:** TCGA samples were divided into 186 training samples and 46
+held-out test samples. Filtering, selection of 1,000 genes and standardisation
+were learned using the training cohort only.
+
+```{r ml-preparation, results='asis', echo=FALSE}
+show_script_code(
+  "Scripts/Final/09_ML_Data_Preparation.R",
+  "Machine-learning data preparation"
+)
+
+show_table(
+  "Results/ML/ML_Preprocessing_Summary.csv",
+  "Machine-learning preprocessing summary"
+)
+```
+
+# Feature-selection strategy
+
+**What was done:** The same 1,000 training-selected predictors were supplied
+independently to multinomial LASSO and Random Forest. LASSO retained 56 genes
+at lambda.min, Random Forest contributed its top 30 permutation-importance
+genes and their intersection produced 11 shared candidate biomarkers.
+
+```{r feature-selection-output, results='asis', echo=FALSE}
+show_script_code(
+  "Scripts/Thesis_Figures/17_Feature_Selection_Strategy.R",
+  "Feature-selection strategy"
+)
+
+show_figure(
+  "Figures/Feature_Selection/Feature_Selection_Workflow_Final.png",
+  "Figure 2.2. Feature-selection strategy used for candidate biomarker prioritisation"
+)
+```
+
+# Multinomial LASSO
+
+```{r lasso-results, results='asis', echo=FALSE}
+show_script_code(
+  "Scripts/Final/10_LASSO_Classification.R",
+  "Multinomial LASSO training and evaluation"
+)
+
+show_figure(
+  "Figures/ML/LASSO_CrossValidation.png",
+  "Five-fold cross-validation for multinomial LASSO"
+)
+
+show_figure(
+  "Figures/ML/LASSO_ConfusionMatrix_lambda_min.png",
+  "LASSO held-out test confusion matrix at lambda.min"
+)
+
+show_figure(
+  "Figures/ML/LASSO_Top_Selected_Genes.png",
+  "Top genes retained by the LASSO model"
+)
+
+show_table(
+  "Results/ML/LASSO_Overall_Metrics.csv",
+  "LASSO overall held-out test metrics"
+)
+```
+
+# Random Forest
+
+```{r random-forest-results, results='asis', echo=FALSE}
+show_script_code(
+  "Scripts/Final/11_Random_Forest_Classification.R",
+  "Random Forest training and permutation importance"
+)
+
+show_figure(
+  "Figures/ML/RandomForest_CrossValidation.png",
+  "Random Forest cross-validation performance"
+)
+
+show_figure(
+  "Figures/ML/RandomForest_ConfusionMatrix.png",
+  "Random Forest held-out test confusion matrix"
+)
+
+show_figure(
+  "Figures/ML/RandomForest_Top_Genes.png",
+  "Figure 3.7. Random Forest feature importance for subtype classification"
+)
+
+show_table(
+  "Results/ML/RandomForest_Overall_Metrics.csv",
+  "Random Forest overall held-out test metrics"
+)
+```
+
+# Internal model comparison
+
+```{r internal-comparison, results='asis', echo=FALSE}
+show_script_code(
+  "Scripts/Final/12_Model_Comparison.R",
+  "Internal LASSO and Random Forest comparison"
+)
+
+show_figure(
+  "Figures/ML/LASSO_vs_RandomForest_Performance.png",
+  "Held-out TCGA performance: LASSO versus Random Forest"
+)
+
+show_table(
+  "Results/ML/Model_Comparison_Primary.csv",
+  "Primary internal model comparison"
+)
+```
+
+# Independent CPTAC evaluation
+
+**What was done:** The TCGA-trained models were applied to CPTAC-UCEC without
+retraining. This is an external transfer evaluation rather than clinical
+validation.
+
+```{r external-evaluation, results='asis', echo=FALSE}
+show_script_code(
+  "Scripts/Final/13_CPTAC_External_Evaluation.R",
+  "Independent CPTAC external evaluation"
+)
+
+show_figure(
+  "Figures/External_Validation/Internal_vs_External_Accuracy.png",
+  "Internal TCGA and external CPTAC accuracy"
+)
+
+show_figure(
+  "Figures/External_Validation/CPTAC_LASSO_ConfusionMatrix.png",
+  "CPTAC LASSO confusion matrix"
+)
+
+show_figure(
+  "Figures/External_Validation/CPTAC_RandomForest_ConfusionMatrix.png",
+  "CPTAC Random Forest confusion matrix"
+)
+
+show_table(
+  "Results/External_Validation/CPTAC_Model_Metrics.csv",
+  "CPTAC external evaluation metrics"
+)
+
+show_table(
+  "Results/External_Validation/CPTAC_Gene_and_Scale_Compatibility.csv",
+  "CPTAC gene-coverage and scale compatibility"
+)
+```
+
+# Internal and external model-performance table
+
+The same data used to create the editable Word table are written to CSV and
+displayed directly below, so the table is visible inside the HTML.
+
+```{r performance-table-output, results='asis', echo=FALSE}
+show_script_code(
+  "Scripts/Thesis_Figures/18_Model_Performance_Table.R",
+  "Internal and external model-performance table"
+)
+
+show_table(
+  "Results/Tables/Model_Performance_Table.csv",
+  paste0(
+    "Internal and external performance of LASSO and Random Forest models ",
+    "for UCEC molecular subtype classification"
+  ),
+  digits = 3
+)
+
+show_file_link(
+  "Results/Tables/Model_Performance_Table_Editable.docx",
+  "Open the editable Word version of this table"
+)
+```
+
+# Candidate-biomarker prioritisation
+
+**What was done:** Genes retained by LASSO were compared with the top 30 Random
+Forest genes. Differential-expression and biological evidence were added to
+prioritise candidate biomarkers.
+
+```{r biomarker-results, results='asis', echo=FALSE}
+show_script_code(
+  "Scripts/Final/14_Biological_Interpretation.R",
+  "Biological interpretation and candidate-biomarker prioritisation"
+)
+
+show_script_code(
+  "Scripts/Thesis_Figures/19_Shared_Candidate_Biomarkers_Table.R",
+  "Shared candidate-biomarker table"
+)
+
+show_figure(
+  "Figures/Biological_Interpretation/Priority_Biomarker_Heatmap_600dpi.png",
+  "Expression heatmap for prioritised candidate biomarkers"
+)
+
+show_figure(
+  "Figures/Biological_Interpretation/Priority_Gene_Expression_Boxplots.png",
+  "Priority candidate-gene expression across TCGA-UCEC molecular subtypes"
+)
+
+show_figure(
+  "Figures/Biological_Interpretation/Priority_Biomarker_Evidence_Scores.png",
+  "Evidence scores for prioritised candidate biomarkers"
+)
+
+show_table(
+  "Results/ML/Shared_Candidate_Biomarkers_Detailed.csv",
+  "Eleven shared candidate biomarkers supported by LASSO and Random Forest",
+  digits = 4
+)
+
+show_table(
+  "Results/Biological_Interpretation/ML_Gene_Overlap_Summary.csv",
+  "Overlap between LASSO and Random Forest gene selections"
+)
+
+show_table(
+  "Results/Biological_Interpretation/Top10_Biomarkers_for_Presentation.csv",
+  "Top candidate biomarkers for presentation",
+  n = 10
+)
+```
+
+# Final integrated summary
+
+```{r final-summary, results='asis', echo=FALSE}
+show_script_code(
+  "Scripts/Final/15_Final_Figures_and_Summary_Tables.R",
+  "Final figures and summary tables"
+)
+
+show_figure(
+  "Figures/Final/Combined_ML_and_Biomarker_Summary.png",
+  "Combined machine-learning and biomarker summary"
+)
+
+show_figure(
+  "Figures/Final/Internal_vs_External_Model_Accuracy.png",
+  "Final internal and external model-accuracy comparison"
+)
+
+show_table(
+  "Results/Final/Final_Project_Summary.csv",
+  "Final project summary",
+  n = 20
+)
+
+show_table(
+  "Results/Final/Key_Findings_for_Presentation.csv",
+  "Key findings prepared for presentation",
+  n = 20
+)
+```
+
+# Output audit
+
+```{r report-output-audit}
+report_outputs <- c(
+  "Figures/Dataset_Slide/Datasets_StudyDesign_MolecularSubtypes_Final.png",
+  "Figures/PCA/PCA_TCGA_Subtypes_Top1000_Combined.png",
+  "Figures/Exploratory/Top20_Most_Variable_Genes.png",
+  "Figures/Exploratory/Heatmap_Top20_Variable_Genes.png",
+  "Figures/Differential_Expression/Combined_Volcano_Plots_600dpi.png",
+  "Figures/Differential_Expression/Significant_DEG_Counts_600dpi.png",
+  "Results/Differential_Expression/Significant_DEG_Counts_by_Comparison.csv",
+  "Results/Differential_Expression/Total_Significant_DEGs_by_Comparison.csv",
+  "Figures/Enrichment/GO_BP_Combined.png",
+  "Figures/Enrichment/KEGG_Combined.png",
+  "Figures/Feature_Selection/Feature_Selection_Workflow_Final.png",
+  "Figures/ML/LASSO_CrossValidation.png",
+  "Figures/ML/RandomForest_Top_Genes.png",
+  "Figures/ML/LASSO_vs_RandomForest_Performance.png",
+  "Figures/External_Validation/Internal_vs_External_Accuracy.png",
+  "Figures/Biological_Interpretation/Priority_Biomarker_Heatmap_600dpi.png",
+  "Figures/Biological_Interpretation/Priority_Gene_Expression_Boxplots.png",
+  "Figures/Final/Combined_ML_and_Biomarker_Summary.png",
+  "Results/Tables/Model_Performance_Table.csv",
+  "Results/ML/Shared_Candidate_Biomarkers_Detailed.csv"
+)
+
+output_audit <- data.frame(
+  Output = report_outputs,
+  Exists = file.exists(report_outputs),
+  Size_KB = ifelse(
+    file.exists(report_outputs),
+    round(
+      file.info(report_outputs)$size / 1024,
+      1
+    ),
+    NA_real_
+  )
+)
+
+knitr::kable(
+  output_audit,
+  caption = "Final figure and table output audit",
+  format = "html"
+)
+```
+
+# Reproducibility information
+
+The heavy workflow remains in the 15 numbered scripts under `Scripts/Final`.
+The five later scripts are stored under `Scripts/Thesis_Figures`. All source
+code is shown inside collapsible sections in this HTML, including the
+publication-style differential-expression script that generates Figure 3.3.
+
+```{r session-information}
+sessionInfo()
+```
