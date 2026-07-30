@@ -33,9 +33,6 @@ placed in the same project-relative folders used during the analysis.
 
 ## Reproducibility
 
-Run the low-memory master R Markdown first, followed by the final
-reproducibility-report R Markdown.
-
 The repository shares computational code and selected non-identifiable
 scientific outputs. Raw source data should only be redistributed where the
 relevant access and reuse terms permit it.
