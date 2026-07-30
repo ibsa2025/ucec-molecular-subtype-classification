@@ -19,8 +19,8 @@ Scripts/
 ├── Final/                 # Scripts 01–15
 └── Thesis_Figures/        # Scripts 16–20
 
-Figures/                   # Add generated figures here
-Results/                   # Add generated result tables here
+Figures/                   
+Results/                   # Figures and table results
 
 UCEC_Master_Analysis_Low_Memory.Rmd
 UCEC_Reproducibility_Report_Final_With_Code.Rmd
